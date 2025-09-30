@@ -1,0 +1,175 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// User model for authentication and user management
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  trainingSessions TrainingSession[]
+  exoplanetResults ExoplanetResult[]
+}
+
+// Training session model to track AI training runs
+model TrainingSession {
+  id            String   @id @default(cuid())
+  userId        String?
+  dataSource    String   // 'kepler', 'tess', 'k2', 'combined'
+  status        String   // 'pending', 'running', 'completed', 'failed', 'stopped'
+  progress      Float    @default(0)
+  currentEpoch  Int      @default(0)
+  totalEpochs   Int
+  batchSize     Int
+  learningRate  Float
+  validationSplit Float
+  loss          Float?
+  accuracy      Float?
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+  errorMessage  String?
+  
+  // Configuration JSON for additional parameters
+  config        String?
+  
+  // Relations
+  user          User?           @relation(fields: [userId], references: [id])
+  exoplanetResults ExoplanetResult[]
+  logs          TrainingLog[]
+  performance   ModelPerformance[]
+}
+
+// Training logs for real-time progress tracking
+model TrainingLog {
+  id        String   @id @default(cuid())
+  sessionId String
+  level     String   // 'info', 'warning', 'error', 'debug'
+  message   String
+  timestamp DateTime @default(now())
+  
+  // Relations
+  session   TrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+// Exoplanet candidates detected by the AI
+model ExoplanetResult {
+  id             String   @id @default(cuid())
+  sessionId      String
+  userId         String?
+  name           String?
+  hostStar       String?
+  confidence     Float    // AI confidence score (0-1)
+  status         String   // 'candidate', 'confirmed', 'false_positive'
+  detectionMethod String  // 'transit', 'radial_velocity', 'astrometry', etc.
+  
+  // Physical characteristics
+  radius         Float?   // Earth radii
+  mass           Float?   // Earth masses
+  orbitalPeriod  Float?   // days
+  orbitalRadius  Float?   // AU
+  temperature    Float?   // Kelvin
+  
+  // Detection metrics
+  transitDepth   Float?   // ppm
+  transitDuration Float?  // hours
+  signalToNoise  Float?
+  
+  // Data source information
+  dataSource     String   // 'kepler', 'tess', 'k2'
+  keplerId       String?  // Kepler KOI identifier
+  tessId         String?  // TESS TOI identifier
+  
+  // Additional metadata
+  rawData        String?  // JSON string with additional data
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  // Relations
+  session        TrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user           User?           @relation(fields: [userId], references: [id])
+}
+
+// NASA data source information
+model DataSource {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  type          String   // 'kepler', 'tess', 'k2', 'other'
+  description   String?
+  url           String?
+  apiEndpoint   String?
+  totalObjects  Int      @default(0)
+  lastUpdated   DateTime @default(now())
+  isActive      Boolean  @default(true)
+  
+  // Configuration
+  config        String?  // JSON string with API configuration
+  
+  // Relations
+  dataRecords   DataRecord[]
+}
+
+// Individual data records from NASA sources
+model DataRecord {
+  id            String   @id @default(cuid())
+  sourceId      String
+  externalId    String   // NASA identifier
+  objectType    String   // 'star', 'planet_candidate', 'confirmed_planet'
+  
+  // Basic properties
+  ra            Float?   // Right ascension
+  dec           Float?   // Declination
+  magnitude     Float?   // Stellar magnitude
+  temperature   Float?   // Stellar temperature (K)
+  radius        Float?   // Stellar radius (solar radii)
+  mass          Float?   // Stellar mass (solar masses)
+  
+  // Planet candidate properties
+  period        Float?   // Orbital period (days)
+  radiusRatio   Float?   // Planet-to-star radius ratio
+  depth         Float?   // Transit depth (ppm)
+  duration      Float?   // Transit duration (hours)
+  
+  // Data quality flags
+  dataQuality   Float?   // Quality score (0-1)
+  flags         String?  // JSON string with quality flags
+  
+  // Metadata
+  rawData       String?  // JSON string with complete data
+  processedAt   DateTime @default(now())
+  
+  // Relations
+  source        DataSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+}
+
+// Model performance metrics
+model ModelPerformance {
+  id            String   @id @default(cuid())
+  sessionId     String
+  epoch         Int
+  trainLoss     Float
+  validationLoss Float?
+  trainAccuracy Float?
+  validationAccuracy Float?
+  precision     Float?
+  recall        Float?
+  f1Score       Float?
+  timestamp     DateTime @default(now())
+  
+  // Relations
+  session       TrainingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
